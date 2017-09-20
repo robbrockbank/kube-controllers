@@ -18,7 +18,7 @@ import (
 	"github.com/projectcalico/libcalico-go/lib/api"
 	"github.com/projectcalico/libcalico-go/lib/backend/k8s"
 	backendConverter "github.com/projectcalico/libcalico-go/lib/converter"
-	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
+	extensions "github.com/projectcalico/libcalico-go/lib/backend/extensions"
 )
 
 type policyConverter struct {
@@ -30,7 +30,7 @@ func NewPolicyConverter() Converter {
 }
 
 func (p *policyConverter) Convert(k8sObj interface{}) (interface{}, error) {
-	np := k8sObj.(*v1beta1.NetworkPolicy)
+	np := k8sObj.(*extensions.NetworkPolicy)
 
 	var policyConverter k8s.Converter
 	kvpair, err := policyConverter.NetworkPolicyToPolicy(np)
