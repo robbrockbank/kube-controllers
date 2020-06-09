@@ -437,6 +437,77 @@ var _ = Describe("Config", func() {
 
 		})
 
+		Context("with DebuggingConfiguration setting log severity", func() {
+			var m *mockKCC
+			var ctrl *config.RunConfigController
+			var ctx context.Context
+			var cancel context.CancelFunc
+
+			BeforeEach(func() {
+				kcc := v3.NewKubeControllersConfiguration()
+				kcc.Name = "default"
+				kcc.Spec = v3.KubeControllersConfigurationSpec{
+					LogSeverityScreen:      "Info",
+					HealthChecks:           v3.Disabled,
+					EtcdV3CompactionPeriod: &v1.Duration{Duration: 0},
+					Controllers: v3.ControllersConfig{
+						Node: &v3.NodeControllerConfig{
+							ReconcilerPeriod: nil,
+							SyncLabels:       v3.Disabled,
+							HostEndpoint:     &v3.AutoHostEndpointConfig{AutoCreate: v3.Enabled},
+						},
+						Policy: &v3.PolicyControllerConfig{
+							ReconcilerPeriod: &v1.Duration{Duration: time.Second * 30}},
+						WorkloadEndpoint: &v3.WorkloadEndpointControllerConfig{
+							ReconcilerPeriod: &v1.Duration{Duration: time.Second * 31}},
+						Namespace: &v3.NamespaceControllerConfig{
+							ReconcilerPeriod: &v1.Duration{Duration: time.Second * 32}},
+						ServiceAccount: &v3.ServiceAccountControllerConfig{
+							ReconcilerPeriod: &v1.Duration{Duration: time.Second * 33}},
+					},
+				}
+				m = &mockKCC{get: kcc}
+				ctx, cancel = context.WithCancel(context.Background())
+				ctrl = config.NewRunConfigController(ctx, *cfg, m)
+				os.Setenv(config.DCEnvLogLevel, "debug")
+			})
+
+			AfterEach(func() {
+				os.Unsetenv(config.DCEnvLogLevel)
+				cancel()
+			})
+
+			It("should return RunConfig with correct log severity", func(done Done) {
+				runCfg := <-ctrl.ConfigChan()
+				Expect(runCfg.LogLevelScreen).To(Equal(log.DebugLevel))
+				Expect(runCfg.HealthEnabled).To(BeFalse())
+				Expect(runCfg.EtcdV3CompactionPeriod).To(Equal(time.Duration(0)))
+
+				rc := runCfg.Controllers
+				Expect(rc.Node).To(Equal(&config.NodeControllerConfig{
+					SyncLabels:        false,
+					AutoHostEndpoints: true,
+					DeleteNodes:       true,
+				}))
+				Expect(rc.Policy).To(Equal(&config.GenericControllerConfig{
+					ReconcilerPeriod: time.Second * 30,
+					NumberOfWorkers:  1,
+				}))
+				Expect(rc.WorkloadEndpoint).To(Equal(&config.GenericControllerConfig{
+					ReconcilerPeriod: time.Second * 31,
+					NumberOfWorkers:  1,
+				}))
+				Expect(rc.Namespace).To(Equal(&config.GenericControllerConfig{
+					ReconcilerPeriod: time.Second * 32,
+					NumberOfWorkers:  1,
+				}))
+				Expect(rc.ServiceAccount).To(Equal(&config.GenericControllerConfig{
+					ReconcilerPeriod: time.Second * 33,
+					NumberOfWorkers:  1,
+				}))
+				close(done)
+			})
+		})
 	})
 
 	Context("with valid user defined values", func() {

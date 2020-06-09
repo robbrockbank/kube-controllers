@@ -26,9 +26,10 @@ const (
 	EnvHealthEnabled      = "HEALTH_ENABLED"
 	EnvSyncNodeLabels     = "SYNC_NODE_LABELS"
 	EnvAutoHostEndpoints  = "AUTO_HOST_ENDPOINTS"
+	DCEnvLogLevel         = "DEBUGGING_CONFIGURATION_LOG_LEVEL"
 )
 
-var AllEnvs = []string{EnvLogLevel, EnvReconcilerPeriod, EnvEnabledControllers, EnvCompactionPeriod, EnvHealthEnabled, EnvSyncNodeLabels, EnvAutoHostEndpoints}
+var AllEnvs = []string{EnvLogLevel, EnvReconcilerPeriod, EnvEnabledControllers, EnvCompactionPeriod, EnvHealthEnabled, EnvSyncNodeLabels, EnvAutoHostEndpoints, DCEnvLogLevel}
 
 // Config represents the configuration we load from the environment variables
 type Config struct {

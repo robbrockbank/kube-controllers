@@ -34,7 +34,9 @@ import (
 	"k8s.io/klog"
 
 	"github.com/projectcalico/libcalico-go/lib/apiconfig"
+	v3 "github.com/projectcalico/libcalico-go/lib/apis/v3"
 	client "github.com/projectcalico/libcalico-go/lib/clientv3"
+	logsetting "github.com/projectcalico/libcalico-go/lib/logsettings"
 	"github.com/projectcalico/libcalico-go/lib/logutils"
 
 	"github.com/projectcalico/kube-controllers/pkg/config"
@@ -119,6 +121,9 @@ func main() {
 		controllers: make(map[string]controller.Controller),
 		stop:        stop,
 	}
+
+	logsetting.RegisterForLogSettings(ctx, calicoClient, v3.ComponentKubeControllers, "",
+		config.DebuggingConfigurationHandler, calicoClient.KubeControllersConfiguration())
 
 	var runCfg config.RunConfig
 	// flannelmigration doesn't use the datastore config API

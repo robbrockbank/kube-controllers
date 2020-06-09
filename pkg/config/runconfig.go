@@ -98,6 +98,45 @@ type NodeControllerConfig struct {
 	DeleteNodes bool
 }
 
+func DebuggingConfigurationHandler(logLevel v3.LogLevel, client interface{}) {
+	log.Info("Detected a default DebuggingConfiguration change. Processing it.")
+
+	if client == nil {
+		log.Warn("client is nil. This should not happen. Restart Pod to recover.")
+		return
+	}
+
+	// try up to 5 times
+	for i := 0; i < 5; i++ {
+		c := client.(clientv3.KubeControllersConfigurationInterface)
+		var ctx context.Context
+		snapshot, err := getOrCreateSnapshot(ctx, c)
+		if logLevel == v3.LogLevelDebug {
+			os.Setenv(DCEnvLogLevel, "true")
+			if snapshot.Status.EnvironmentVars[DCEnvLogLevel] == "Debug" {
+				// If there is no change, no need to update
+				break
+			}
+			snapshot.Status.EnvironmentVars[DCEnvLogLevel] = "Debug"
+		} else {
+			os.Unsetenv(DCEnvLogLevel)
+			if _, ok := snapshot.Status.EnvironmentVars[DCEnvLogLevel]; !ok {
+				// If there is no change, no need to update
+				break
+			}
+			delete(snapshot.Status.EnvironmentVars, DCEnvLogLevel)
+		}
+		// Updating Status will cause watcher on KubeControllersConfiguration to take appropriate
+		// actions
+		_, err = c.Update(ctx, snapshot, options.SetOptions{})
+		if err != nil {
+			log.Infof("Failed to update KubeControllersConfiguration %v", err)
+		} else {
+			break
+		}
+	}
+}
+
 type RunConfigController struct {
 	out chan RunConfig
 }
@@ -595,24 +634,31 @@ func mergeEnabledControllers(envVars map[string]string, status *v3.KubeControlle
 }
 
 func mergeLogLevel(envVars map[string]string, status *v3.KubeControllersConfigurationStatus, rCfg *RunConfig, apiCfg v3.KubeControllersConfigurationSpec) {
-	v, p := envVars[EnvLogLevel]
-	if p {
-		status.EnvironmentVars[EnvLogLevel] = v
-		l, err := log.ParseLevel(v)
-		if err != nil {
-			log.WithField(EnvLogLevel, v).Fatal("invalid environment variable value")
-		}
-		rCfg.LogLevelScreen = l
+	// If DebuggingConfiguration log severity is set to Debug for kube-controllers, that takes precedence over
+	// any other mechanism. If not, fall back using old mechanism.
+	if dcSet := os.Getenv(DCEnvLogLevel); dcSet != "" {
+		status.EnvironmentVars[DCEnvLogLevel] = "Debug"
+		rCfg.LogLevelScreen = log.DebugLevel
 	} else {
-		// No environment variable, check API
-		l, err := log.ParseLevel(apiCfg.LogSeverityScreen)
-		if err == nil {
-			// API valid
+		v, p := envVars[EnvLogLevel]
+		if p {
+			status.EnvironmentVars[EnvLogLevel] = v
+			l, err := log.ParseLevel(v)
+			if err != nil {
+				log.WithField(EnvLogLevel, v).Fatal("invalid environment variable value")
+			}
 			rCfg.LogLevelScreen = l
 		} else {
-			// API invalid, use default
-			log.WithField("LOG_LEVEL", apiCfg.LogSeverityScreen).Warn("unknown log level, using Info")
-			rCfg.LogLevelScreen = log.InfoLevel
+			// No environment variable, check API
+			l, err := log.ParseLevel(apiCfg.LogSeverityScreen)
+			if err == nil {
+				// API valid
+				rCfg.LogLevelScreen = l
+			} else {
+				// API invalid, use default
+				log.WithField("LOG_LEVEL", apiCfg.LogSeverityScreen).Warn("unknown log level, using Info")
+				rCfg.LogLevelScreen = log.InfoLevel
+			}
 		}
 	}
 	status.RunningConfig.LogSeverityScreen = strings.Title(rCfg.LogLevelScreen.String())
